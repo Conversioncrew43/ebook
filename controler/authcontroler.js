@@ -1,3 +1,31 @@
+// Password reset request: generates a reset token (for demo, returns a dummy token)
+module.exports.password_reset_request = async (req, res) => {
+    const { email } = req.body;
+    // In production, generate a secure token and email it
+    // For demo, just return a dummy token if user exists
+    const user = await User.findOne({ email });
+    if (!user) {
+        return res.status(400).json({ message: 'Email not found' });
+    }
+    // Generate a dummy token (in real app, store in DB and expire it)
+    const resetToken = 'RESET-' + Math.random().toString(36).substring(2, 15);
+    // Optionally: save token to user, send email, etc.
+    res.json({ ok: true, resetToken });
+};
+
+// Password reset confirm: sets new password if token is valid (demo: always accepts)
+module.exports.password_reset_confirm = async (req, res) => {
+    const { token, newPassword } = req.body;
+    // In production, validate token and find user
+    // For demo, just update the first user
+    const user = await User.findOne();
+    if (!user) {
+        return res.status(400).json({ message: 'User not found' });
+    }
+    user.password = newPassword;
+    await user.save();
+    res.json({ ok: true });
+};
 const User = require('../model/user');
 const jwt = require('jsonwebtoken')
 
@@ -40,14 +68,13 @@ module.exports.display_get = (req,res)=>{
 }
 module.exports.register_post = async(req,res)=>{
     console.log(req.body)
-    const {name,email,password,countrycode, mobilenumber} = req.body;
-    console.log(mobilenumber);
+    const {name,email,password,countryCode, mobileNumber} = req.body;
+    console.log("mobile"+mobileNumber);
     try{
-      const user =await User.create({name,email,password,countrycode, mobilenumber});
+      const user =await User.create({name,email,password,countryCode, mobileNumber});
       const token = createToken(user._id);
       console.log(token);
       res.status(201).json({token});
-      
     }
     catch(err){
         const errors = handleErrors(err);

@@ -18,7 +18,7 @@ const userSchema = new Schema({
         type:String,
         require:true
     },
-    countrycode: { // New field for the country code
+    countryCode: { // New field for the country code
         type: String,
         required: true
     },
