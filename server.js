@@ -47,7 +47,7 @@ app.get("/", (req, res) => {
 
 const port = process.env.PORT || 5000;
 const dbURI =
-  "mongodb+srv://Aditya:Aditya@cluster0.atrko.mongodb.net/ajay?retryWrites=true&w=majority";
+  "mongodb+srv://Aditya:Aditya@cluster0.atrko.mongodb.net/Acons?retryWrites=true&w=majority";
 mongoose
   .connect(dbURI)
   .then((result) => console.log("connected"), app.listen(port))
