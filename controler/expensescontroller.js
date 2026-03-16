@@ -60,9 +60,44 @@ exports.get = async (req, res) => {
 
 exports.update = async (req, res) => {
   try {
-    const expense = await Expense.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!expense) return res.status(404).json({ message: 'Expense not found' });
-    res.json(expense);
+    const oldExpense = await Expense.findById(req.params.id);
+    if (!oldExpense) return res.status(404).json({ message: 'Expense not found' });
+
+    // Update the expense record
+    await Expense.findByIdAndUpdate(req.params.id, req.body, { new: true });
+
+    // Handle vendor update in payment history
+    if (req.body.vendor) {
+      const Vendor = require('../model/vendor');
+      // If vendor changed, remove old entry and add new one
+      if (oldExpense.vendor && oldExpense.vendor.toString() !== req.body.vendor.toString()) {
+        await Vendor.findByIdAndUpdate(oldExpense.vendor, {
+          $pull: {
+            paymentHistory: { _id: { $exists: true } }
+          }
+        });
+      }
+      
+      await Vendor.findByIdAndUpdate(req.body.vendor, {
+        $push: {
+          paymentHistory: {
+            project: req.body.project,
+            amount: req.body.amount,
+            paymentDate: req.body.date,
+            paymentMethod: req.body.paymentMethod || 'Cash',
+            notes: req.body.notes,
+          }
+        }
+      });
+    }
+
+    // Fetch and return the updated expense with populated relationships
+    const updatedExpense = await Expense.findById(req.params.id)
+      .populate('project', 'projectName')
+      .populate('vendor', 'vendorName companyName')
+      .populate('user', 'name email');
+
+    res.json(updatedExpense);
   } catch (err) {
     res.status(400).json({ message: 'Failed to update expense' });
   }
