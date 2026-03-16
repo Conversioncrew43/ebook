@@ -22,11 +22,27 @@ const userSchema = new Schema({
         type: String,
         required: true
     },
+
     mobilenumber:{
         type:Number,
         require:true
-    }
-    
+    },
+    role: {
+        type: String,
+        enum: ['admin', 'user'],
+        default: 'admin',
+    },
+    assignedProjects: [{
+        type: Schema.Types.ObjectId,
+        ref: 'Project',
+        default: []
+    }],
+    activityLog: [{
+        action: String,
+        timestamp: { type: Date, default: Date.now },
+        details: String
+    }]
+
 },{timestamps:true});
 
 

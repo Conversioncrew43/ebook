@@ -137,3 +137,48 @@ module.exports.display_user = (req,res)=>{
         return res.status(401).json({ message: 'No token provided.' });
     }
 }
+
+module.exports.update_user = (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+        return res.status(401).json({ message: 'No token provided.' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+        return res.status(401).json({ message: 'No token provided.' });
+    }
+
+    jwt.verify(token, 'Adisecret', async (err, decodedToken) => {
+        if (err) {
+            console.log(err.message);
+            return res.status(400).json({ message: 'Invalid token.' });
+        }
+
+        try {
+            const user = await User.findById(decodedToken.id);
+            if (!user) {
+                return res.status(404).json({ message: 'User not found.' });
+            }
+
+            const { name, email, password, countryCode, mobilenumber } = req.body;
+            if (name) user.name = name;
+            if (email) user.email = email;
+            if (typeof countryCode === 'string') user.countryCode = countryCode;
+            if (typeof mobilenumber !== 'undefined') user.mobilenumber = mobilenumber;
+            if (password) user.password = password;
+
+            await user.save();
+
+            const userDetailsWithoutPassword = {
+                ...user._doc,
+                password: undefined,
+            };
+
+            res.status(200).json({ userdetails: userDetailsWithoutPassword });
+        } catch (err) {
+            const errors = handleErrors(err);
+            res.status(400).json({ errors });
+        }
+    });
+};

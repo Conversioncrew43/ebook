@@ -30,6 +30,11 @@ exports.get = async (req, res) => {
 
 exports.update = async (req, res) => {
   try {
+    // Prevent role update if not admin
+    if (req.body.role !== undefined) {
+      // You can add more robust admin check here (e.g., req.user.role === 'admin')
+      return res.status(403).json({ message: 'You are not allowed to edit roles.' });
+    }
     const user = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user);
