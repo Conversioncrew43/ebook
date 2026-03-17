@@ -223,3 +223,129 @@ exports.vendor_analytics = async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch vendor analytics' });
   }
 };
+
+exports.client_summary = async (req, res) => {
+  try {
+    // Get all projects grouped by client
+    const projects = await Project.find({}, 'projectName clientName _id')
+      .lean();
+
+    if (!projects.length) {
+      return res.json({ clientSummaries: [] });
+    }
+
+    // Get unique clients
+    const clientNames = [...new Set(projects.map(p => p.clientName).filter(c => c))];
+    
+    // Build client summary
+    const clientSummaries = await Promise.all(
+      clientNames.map(async (clientName) => {
+        const clientProjects = projects.filter(p => p.clientName === clientName);
+        const projectIds = clientProjects.map(p => p._id);
+
+        // Get bills for this client
+        const billAgg = await Bill.aggregate([
+          {
+            $match: {
+              project: { $in: projectIds }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              totalBills: { $sum: '$totalAmount' }
+            }
+          }
+        ]);
+
+        // Get payments for this client
+        const paymentAgg = await Payment.aggregate([
+          {
+            $match: {
+              project: { $in: projectIds }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              totalPayments: { $sum: '$amount' }
+            }
+          }
+        ]);
+
+        const totalBills = billAgg[0]?.totalBills || 0;
+        const totalPayments = paymentAgg[0]?.totalPayments || 0;
+
+        // Get project-wise details
+        const projectDetails = await Promise.all(
+          clientProjects.map(async (project) => {
+            const projBills = await Bill.aggregate([
+              {
+                $match: { project: project._id }
+              },
+              {
+                $group: {
+                  _id: null,
+                  billTotal: { $sum: '$totalAmount' }
+                }
+              }
+            ]);
+
+            const projPayments = await Payment.aggregate([
+              {
+                $match: { project: project._id }
+              },
+              {
+                $group: {
+                  _id: null,
+                  paymentTotal: { $sum: '$amount' }
+                }
+              }
+            ]);
+
+            const projExpenses = await Expense.aggregate([
+              {
+                $match: {
+                  project: project._id,
+                  type: { $ne: 'payment' }
+                }
+              },
+              {
+                $group: {
+                  _id: null,
+                  expenseTotal: { $sum: '$amount' }
+                }
+              }
+            ]);
+
+            return {
+              projectId: project._id.toString(),
+              projectName: project.projectName,
+              bills: projBills[0]?.billTotal || 0,
+              payments: projPayments[0]?.paymentTotal || 0,
+              expenses: projExpenses[0]?.expenseTotal || 0,
+              pending: (projBills[0]?.billTotal || 0) - (projPayments[0]?.paymentTotal || 0)
+            };
+          })
+        );
+
+        return {
+          clientName,
+          totalBills,
+          totalPayments,
+          pendingAmount: totalBills - totalPayments,
+          projectCount: clientProjects.length,
+          projects: projectDetails
+        };
+      })
+    );
+
+    // Sort by pending amount (descending)
+    clientSummaries.sort((a, b) => b.pendingAmount - a.pendingAmount);
+
+    res.json({ clientSummaries });
+  } catch (err) {
+    console.error('Client summary error:', err);
+    res.status(500).json({ message: 'Failed to fetch client summary' });
+  }
+};

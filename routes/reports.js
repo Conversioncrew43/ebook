@@ -6,5 +6,6 @@ const reportsController = require('../controler/reportscontroller');
 router.get('/dashboard', reportsController.dashboard_summary);
 router.get('/monthly-expenses', reportsController.monthly_expenses);
 router.get('/vendor-analytics', reportsController.vendor_analytics);
+router.get('/client-summary', reportsController.client_summary);
 
 module.exports = router;
