@@ -12,6 +12,7 @@ const paymentsRoutes = require("./routes/payments");
 const usersRoutes = require("./routes/users");
 const settingsRoutes = require("./routes/settings");
 const vendorsRoutes = require("./routes/vendors");
+const billsRoutes = require("./routes/bills");
 var bodyParser = require("body-parser");
 const multer = require("multer");
 
@@ -123,3 +124,4 @@ app.use("/api/payments", paymentsRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/vendors", vendorsRoutes);
+app.use("/api/bills", billsRoutes);

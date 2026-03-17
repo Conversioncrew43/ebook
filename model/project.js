@@ -59,6 +59,12 @@ const projectSchema = new Schema(
         ref: 'Expense',
       },
     ],
+    bills: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'Bill',
+      },
+    ],
   },
   { timestamps: true }
 );
