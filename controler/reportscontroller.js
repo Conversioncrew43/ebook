@@ -10,27 +10,38 @@ exports.dashboard_summary = async (req, res) => {
     const totalLeads = await Lead.countDocuments();
     const activeProjects = await Project.countDocuments({ status: { $ne: 'Completed' } });
     const expenseAgg = await Expense.aggregate([
+      {
+        $match: {
+          type: { $ne: 'payment' }
+        }
+      },
       { $group: { _id: null, total: { $sum: '$amount' } } },
     ]);
     const paymentAgg = await Payment.aggregate([
       { $group: { _id: null, total: { $sum: '$amount' } } },
     ]);
+    const billAgg = await Bill.aggregate([
+      { $group: { _id: null, total: { $sum: '$totalAmount' } } },
+    ]);
     const totalExpenses = expenseAgg[0]?.total || 0;
     const totalRevenue = paymentAgg[0]?.total || 0;
+    const totalBills = billAgg[0]?.total || 0;
+    
+    // Get all projects first
+    const allProjects = await Project.find({}, '_id projectName');
+    const projectMap = new Map(allProjects.map(p => [p._id.toString(), p.projectName]));
+    
     // Get project summaries for expenses
     const expenseSummaries = await Expense.aggregate([
         {
           $match: {
-            $or: [
-              { type: { $exists: false } },
-              { type: 'expense' },
-              { type: { $ne: 'payment' } }
-            ]
+            project: { $exists: true, $ne: null },
+            type: { $ne: 'payment' }
           }
         },
         {
           $group: {
-            _id: '$project',
+            _id: { $toString: '$project' },
             expenseTotal: { $sum: '$amount' },
           },
         },
@@ -38,8 +49,13 @@ exports.dashboard_summary = async (req, res) => {
     // Get project summaries for payments
     const paymentSummaries = await Payment.aggregate([
       {
+        $match: {
+          project: { $exists: true, $ne: null }
+        }
+      },
+      {
         $group: {
-          _id: '$project',
+          _id: { $toString: '$project' },
           paymentTotal: { $sum: '$amount' },
         },
       },
@@ -47,17 +63,24 @@ exports.dashboard_summary = async (req, res) => {
     // Get project summaries for bills
     const billSummaries = await Bill.aggregate([
       {
+        $match: {
+          project: { $exists: true, $ne: null }
+        }
+      },
+      {
         $group: {
-          _id: '$project',
+          _id: { $toString: '$project' },
           billTotal: { $sum: '$totalAmount' },
         },
       },
     ]);
-    // Combine expense and payment summaries
-    const projectMap = new Map();
+    
+    // Combine all summaries using a Map
+    const projectSummaryMap = new Map();
+    
     expenseSummaries.forEach(exp => {
       if (exp._id) {
-        projectMap.set(exp._id.toString(), {
+        projectSummaryMap.set(exp._id, {
           projectId: exp._id,
           expenseTotal: exp.expenseTotal,
           paymentTotal: 0,
@@ -65,13 +88,13 @@ exports.dashboard_summary = async (req, res) => {
         });
       }
     });
+    
     paymentSummaries.forEach(pay => {
       if (pay._id) {
-        const key = pay._id.toString();
-        if (projectMap.has(key)) {
-          projectMap.get(key).paymentTotal = pay.paymentTotal;
+        if (projectSummaryMap.has(pay._id)) {
+          projectSummaryMap.get(pay._id).paymentTotal = pay.paymentTotal;
         } else {
-          projectMap.set(key, {
+          projectSummaryMap.set(pay._id, {
             projectId: pay._id,
             expenseTotal: 0,
             paymentTotal: pay.paymentTotal,
@@ -80,13 +103,13 @@ exports.dashboard_summary = async (req, res) => {
         }
       }
     });
+    
     billSummaries.forEach(bill => {
       if (bill._id) {
-        const key = bill._id.toString();
-        if (projectMap.has(key)) {
-          projectMap.get(key).billTotal = bill.billTotal;
+        if (projectSummaryMap.has(bill._id)) {
+          projectSummaryMap.get(bill._id).billTotal = bill.billTotal;
         } else {
-          projectMap.set(key, {
+          projectSummaryMap.set(bill._id, {
             projectId: bill._id,
             expenseTotal: 0,
             paymentTotal: 0,
@@ -94,30 +117,25 @@ exports.dashboard_summary = async (req, res) => {
           });
         }
       }
-    });    console.log('Summaries combined, projectMap size:', projectMap.size);    // Get project details
-    const projectIds = Array.from(projectMap.keys()).filter(id => id);
-    const projects = await Project.find({ _id: { $in: projectIds } }, 'projectName');
-    const projectSummaries = Array.from(projectMap.values())
-      .filter(summary => summary.projectId) // Remove entries with null projectId
-      .map(summary => {
-        const project = projects.find(p => p._id.toString() === summary.projectId?.toString());
-        return {
-          projectId: summary.projectId?.toString(),
-          projectName: project?.projectName || 'Unknown Project',
-          expenseTotal: summary.expenseTotal,
-          paymentTotal: summary.paymentTotal,
-          billTotal: summary.billTotal,
-          netTotal: summary.paymentTotal - summary.expenseTotal,
-        };
-      })
-      .filter((summary, index, self) => 
-        index === self.findIndex(s => s.projectId?.toString() === summary.projectId?.toString())
-      ); // Ensure uniqueness
+    });
+    
+    // Convert to array and add project names
+    const projectSummaries = Array.from(projectSummaryMap.values())
+      .map(summary => ({
+        projectId: summary.projectId,
+        projectName: projectMap.get(summary.projectId) || 'Unknown Project',
+        expenseTotal: summary.expenseTotal,
+        paymentTotal: summary.paymentTotal,
+        billTotal: summary.billTotal,
+        netTotal: summary.paymentTotal - summary.expenseTotal,
+      }))
+      .sort((a, b) => b.paymentTotal - a.paymentTotal);
     res.json({
       totalLeads,
       activeProjects,
       totalExpenses,
       totalRevenue,
+      totalBills,
       projectSummaries,
     });
   } catch (err) {
