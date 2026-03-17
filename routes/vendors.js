@@ -9,5 +9,6 @@ router.post('/', vendorController.create);
 router.put('/:id', vendorController.update);
 router.delete('/:id', vendorController.delete);
 router.post('/payment', vendorController.recordPayment);
+router.delete('/:vendorId/payment/:paymentId', vendorController.deletePaymentHistory);
 
 module.exports = router;

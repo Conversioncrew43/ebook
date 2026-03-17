@@ -34,7 +34,12 @@ exports.getAll = async (req, res) => {
 
         // Calculate totals for each vendor
         const vendorsWithTotals = vendors.map(vendor => {
-            const totalPaid = vendor.paymentHistory.reduce((sum, payment) => sum + payment.amount, 0);
+            // Filter payment history by project if projectId is specified
+            const filteredPaymentHistory = projectId 
+                ? vendor.paymentHistory.filter(p => p.project?.toString() === projectId)
+                : vendor.paymentHistory;
+            
+            const totalPaid = filteredPaymentHistory.reduce((sum, payment) => sum + payment.amount, 0);
 
             return {
                 _id: vendor._id,
@@ -47,7 +52,7 @@ exports.getAll = async (req, res) => {
                 },
                 address: vendor.address,
                 projects: vendor.assignedProjects,
-                paymentHistory: vendor.paymentHistory.map(p => ({
+                paymentHistory: filteredPaymentHistory.map(p => ({
                     _id: p._id,
                     amount: p.amount,
                     date: p.paymentDate,
@@ -254,6 +259,31 @@ exports.recordPayment = async (req, res) => {
         res.status(201).json({ message: 'Payment recorded and expense created' });
     } catch (err) {
         res.status(400).json({ message: 'Failed to record payment' });
+    }
+};
+
+// Delete specific payment history entry
+exports.deletePaymentHistory = async (req, res) => {
+    try {
+        const { vendorId, paymentId } = req.params;
+
+        const vendor = await Vendor.findById(vendorId);
+        if (!vendor) {
+            return res.status(404).json({ message: 'Vendor not found' });
+        }
+
+        // Find and remove the specific payment history entry
+        const paymentIndex = vendor.paymentHistory.findIndex(p => p._id.toString() === paymentId);
+        if (paymentIndex === -1) {
+            return res.status(404).json({ message: 'Payment history entry not found' });
+        }
+
+        vendor.paymentHistory.splice(paymentIndex, 1);
+        await vendor.save();
+
+        res.json({ message: 'Payment history entry deleted successfully' });
+    } catch (err) {
+        res.status(500).json({ message: 'Failed to delete payment history entry' });
     }
 };
 
