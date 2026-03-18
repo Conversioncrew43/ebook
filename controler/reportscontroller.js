@@ -7,37 +7,45 @@ const Vendor = require('../model/vendor');
 const Bill = require('../model/bill');
 exports.dashboard_summary = async (req, res) => {
   try {
-    const totalLeads = await Lead.countDocuments();
-    const activeProjects = await Project.countDocuments({ status: { $ne: 'Completed' } });
-    const expenseAgg = await Expense.aggregate([
-      {
-        $match: {
-          type: { $ne: 'payment' }
-        }
-      },
-      { $group: { _id: null, total: { $sum: '$amount' } } },
+    // Run the key dashboard queries in parallel to reduce total request time
+    const [
+      totalLeads,
+      activeProjects,
+      expenseAgg,
+      paymentAgg,
+      billAgg,
+      allProjects,
+    ] = await Promise.all([
+      Lead.countDocuments(),
+      Project.countDocuments({ status: { $ne: 'Completed' } }),
+      Expense.aggregate([
+        {
+          $match: {
+            type: { $ne: 'payment' },
+          },
+        },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+      Payment.aggregate([{ $group: { _id: null, total: { $sum: '$amount' } } }]),
+      Bill.aggregate([{ $group: { _id: null, total: { $sum: '$totalAmount' } } }]),
+      Project.find({}, '_id projectName'),
     ]);
-    const paymentAgg = await Payment.aggregate([
-      { $group: { _id: null, total: { $sum: '$amount' } } },
-    ]);
-    const billAgg = await Bill.aggregate([
-      { $group: { _id: null, total: { $sum: '$totalAmount' } } },
-    ]);
+
     const totalExpenses = expenseAgg[0]?.total || 0;
     const totalRevenue = paymentAgg[0]?.total || 0;
     const totalBills = billAgg[0]?.total || 0;
-    
+
     // Get all projects first
-    const allProjects = await Project.find({}, '_id projectName');
-    const projectMap = new Map(allProjects.map(p => [p._id.toString(), p.projectName]));
-    
-    // Get project summaries for expenses
-    const expenseSummaries = await Expense.aggregate([
+    const projectMap = new Map(allProjects.map((p) => [p._id.toString(), p.projectName]));
+
+    // Get project summaries for expenses/payments/bills (parallel to save time)
+    const [expenseSummaries, paymentSummaries, billSummaries] = await Promise.all([
+      Expense.aggregate([
         {
           $match: {
             project: { $exists: true, $ne: null },
-            type: { $ne: 'payment' }
-          }
+            type: { $ne: 'payment' },
+          },
         },
         {
           $group: {
@@ -45,36 +53,35 @@ exports.dashboard_summary = async (req, res) => {
             expenseTotal: { $sum: '$amount' },
           },
         },
-      ]);
-    // Get project summaries for payments
-    const paymentSummaries = await Payment.aggregate([
-      {
-        $match: {
-          project: { $exists: true, $ne: null }
-        }
-      },
-      {
-        $group: {
-          _id: { $toString: '$project' },
-          paymentTotal: { $sum: '$amount' },
+      ]),
+      Payment.aggregate([
+        {
+          $match: {
+            project: { $exists: true, $ne: null },
+          },
         },
-      },
-    ]);
-    // Get project summaries for bills
-    const billSummaries = await Bill.aggregate([
-      {
-        $match: {
-          project: { $exists: true, $ne: null }
-        }
-      },
-      {
-        $group: {
-          _id: { $toString: '$project' },
-          billTotal: { $sum: '$totalAmount' },
+        {
+          $group: {
+            _id: { $toString: '$project' },
+            paymentTotal: { $sum: '$amount' },
+          },
         },
-      },
+      ]),
+      Bill.aggregate([
+        {
+          $match: {
+            project: { $exists: true, $ne: null },
+          },
+        },
+        {
+          $group: {
+            _id: { $toString: '$project' },
+            billTotal: { $sum: '$totalAmount' },
+          },
+        },
+      ]),
     ]);
-    
+
     // Combine all summaries using a Map
     const projectSummaryMap = new Map();
     
