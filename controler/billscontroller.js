@@ -1,6 +1,24 @@
 const Bill = require('../model/bill');
 const Project = require('../model/project');
 
+function buildDateRange(from, to) {
+  const range = {}
+  if (from) {
+    const fromDate = new Date(from)
+    if (!isNaN(fromDate.getTime())) {
+      range.$gte = fromDate
+    }
+  }
+  if (to) {
+    const toDate = new Date(to)
+    if (!isNaN(toDate.getTime())) {
+      toDate.setHours(23, 59, 59, 999)
+      range.$lte = toDate
+    }
+  }
+  return Object.keys(range).length ? range : null
+}
+
 exports.create = async (req, res) => {
   try {
     // Generate bill number if not provided
@@ -39,6 +57,11 @@ exports.list = async (req, res) => {
     }
     if (req.query.status) {
       filter.status = req.query.status;
+    }
+
+    const dateRange = buildDateRange(req.query.from, req.query.to)
+    if (dateRange) {
+      filter.billDate = dateRange
     }
 
     const bills = await Bill.find(filter)

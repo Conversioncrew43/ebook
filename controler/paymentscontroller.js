@@ -1,6 +1,24 @@
 const Payment = require('../model/payment');
 const Project = require('../model/project');
 
+function buildDateRange(from, to) {
+  const range = {}
+  if (from) {
+    const fromDate = new Date(from)
+    if (!isNaN(fromDate.getTime())) {
+      range.$gte = fromDate
+    }
+  }
+  if (to) {
+    const toDate = new Date(to)
+    if (!isNaN(toDate.getTime())) {
+      toDate.setHours(23, 59, 59, 999)
+      range.$lte = toDate
+    }
+  }
+  return Object.keys(range).length ? range : null
+}
+
 exports.create = async (req, res) => {
   try {
     const payment = await Payment.create(req.body);
@@ -21,6 +39,12 @@ exports.list = async (req, res) => {
     if (req.query.projectId) {
       filter.project = req.query.projectId;
     }
+
+    const dateRange = buildDateRange(req.query.from, req.query.to)
+    if (dateRange) {
+      filter.date = dateRange
+    }
+
     const payments = await Payment.find(filter)
       .populate('project', 'projectName')
       .populate('user', 'name email');

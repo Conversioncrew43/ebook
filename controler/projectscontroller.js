@@ -1,5 +1,23 @@
 const Project = require('../model/project');
 
+function buildDateRange(from, to) {
+  const range = {}
+  if (from) {
+    const fromDate = new Date(from)
+    if (!isNaN(fromDate.getTime())) {
+      range.$gte = fromDate
+    }
+  }
+  if (to) {
+    const toDate = new Date(to)
+    if (!isNaN(toDate.getTime())) {
+      toDate.setHours(23, 59, 59, 999)
+      range.$lte = toDate
+    }
+  }
+  return Object.keys(range).length ? range : null
+}
+
 exports.create = async (req, res) => {
   try {
     const project = await Project.create(req.body);
@@ -11,7 +29,13 @@ exports.create = async (req, res) => {
 
 exports.list = async (req, res) => {
   try {
-    const projects = await Project.find();
+    const filter = {}
+    const dateRange = buildDateRange(req.query.from, req.query.to)
+    if (dateRange) {
+      filter.startDate = dateRange
+    }
+
+    const projects = await Project.find(filter);
     res.json(projects);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch projects' });

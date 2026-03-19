@@ -5,8 +5,31 @@ const Expense = require('../model/expense');
 // Get all vendors with optional filters
 exports.getAll = async (req, res) => {
     try {
-        const { search, type, projectId, page = 1, limit = 10 } = req.query;
+        const { search, type, projectId, from, to, page = 1, limit = 10 } = req.query;
         let query = {};
+
+        const buildDateRange = (from, to) => {
+            const range = {}
+            if (from) {
+                const fromDate = new Date(from)
+                if (!isNaN(fromDate.getTime())) {
+                    range.$gte = fromDate
+                }
+            }
+            if (to) {
+                const toDate = new Date(to)
+                if (!isNaN(toDate.getTime())) {
+                    toDate.setHours(23, 59, 59, 999)
+                    range.$lte = toDate
+                }
+            }
+            return Object.keys(range).length ? range : null
+        }
+
+        const createdAtRange = buildDateRange(from, to)
+        if (createdAtRange) {
+            query.createdAt = createdAtRange
+        }
 
         if (search) {
             query.$or = [

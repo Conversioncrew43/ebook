@@ -1,6 +1,24 @@
 const Expense = require('../model/expense');
 const Project = require('../model/project');
 
+function buildDateRange(from, to) {
+  const range = {}
+  if (from) {
+    const fromDate = new Date(from)
+    if (!isNaN(fromDate.getTime())) {
+      range.$gte = fromDate
+    }
+  }
+  if (to) {
+    const toDate = new Date(to)
+    if (!isNaN(toDate.getTime())) {
+      toDate.setHours(23, 59, 59, 999)
+      range.$lte = toDate
+    }
+  }
+  return Object.keys(range).length ? range : null
+}
+
 exports.create = async (req, res) => {
   try {
     const expense = await Expense.create(req.body);
@@ -38,7 +56,14 @@ exports.list = async (req, res) => {
     }
     // Only fetch expenses, not payments
     filter.type = 'expense';
+
+    const dateRange = buildDateRange(req.query.from, req.query.to)
+    if (dateRange) {
+      filter.date = dateRange
+    }
+
     const expenses = await Expense.find(filter)
+      .sort({ date: -1, _id: -1 })
       .populate('project', 'projectName')
       .populate('vendor', 'vendorName companyName')
       .populate('user', 'name email');

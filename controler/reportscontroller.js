@@ -5,8 +5,41 @@ const Project = require('../model/project');
 const Lead = require('../model/lead'); // You may need to create this model
 const Vendor = require('../model/vendor');
 const Bill = require('../model/bill');
+
+function buildDateRange(from, to) {
+  const range = {}
+  if (from) {
+    const fromDate = new Date(from)
+    if (!isNaN(fromDate.getTime())) {
+      range.$gte = fromDate
+    }
+  }
+  if (to) {
+    const toDate = new Date(to)
+    if (!isNaN(toDate.getTime())) {
+      toDate.setHours(23, 59, 59, 999)
+      range.$lte = toDate
+    }
+  }
+  return Object.keys(range).length ? range : null
+}
+
 exports.dashboard_summary = async (req, res) => {
   try {
+    const { from, to } = req.query
+
+    const leadDateRange = buildDateRange(from, to)
+    const expenseDateRange = buildDateRange(from, to)
+    const paymentDateRange = buildDateRange(from, to)
+    const billDateRange = buildDateRange(from, to)
+    const projectDateRange = buildDateRange(from, to)
+
+    const leadDateFilter = leadDateRange ? { createdAt: leadDateRange } : {}
+    const expenseDateFilter = expenseDateRange ? { date: expenseDateRange } : {}
+    const paymentDateFilter = paymentDateRange ? { date: paymentDateRange } : {}
+    const billDateFilter = billDateRange ? { billDate: billDateRange } : {}
+    const projectDateFilter = projectDateRange ? { createdAt: projectDateRange } : {}
+
     // Run the key dashboard queries in parallel to reduce total request time
     const [
       totalLeads,
@@ -16,19 +49,34 @@ exports.dashboard_summary = async (req, res) => {
       billAgg,
       allProjects,
     ] = await Promise.all([
-      Lead.countDocuments(),
-      Project.countDocuments({ status: { $ne: 'Completed' } }),
+      Lead.countDocuments(leadDateFilter),
+      Project.countDocuments({ status: { $ne: 'Completed' }, ...projectDateFilter }),
       Expense.aggregate([
         {
           $match: {
             type: { $ne: 'payment' },
+            ...expenseDateFilter,
           },
         },
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
-      Payment.aggregate([{ $group: { _id: null, total: { $sum: '$amount' } } }]),
-      Bill.aggregate([{ $group: { _id: null, total: { $sum: '$totalAmount' } } }]),
-      Project.find({}, '_id projectName'),
+      Payment.aggregate([
+        {
+          $match: {
+            ...paymentDateFilter,
+          },
+        },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+      Bill.aggregate([
+        {
+          $match: {
+            ...billDateFilter,
+          },
+        },
+        { $group: { _id: null, total: { $sum: '$totalAmount' } } },
+      ]),
+      Project.find({}, '_id projectName'), // Get ALL projects, not filtered by date
     ]);
 
     const totalExpenses = expenseAgg[0]?.total || 0;
@@ -45,6 +93,7 @@ exports.dashboard_summary = async (req, res) => {
           $match: {
             project: { $exists: true, $ne: null },
             type: { $ne: 'payment' },
+            ...expenseDateFilter,
           },
         },
         {
@@ -58,6 +107,7 @@ exports.dashboard_summary = async (req, res) => {
         {
           $match: {
             project: { $exists: true, $ne: null },
+            ...paymentDateFilter,
           },
         },
         {
@@ -71,6 +121,7 @@ exports.dashboard_summary = async (req, res) => {
         {
           $match: {
             project: { $exists: true, $ne: null },
+            ...billDateFilter,
           },
         },
         {
@@ -136,6 +187,7 @@ exports.dashboard_summary = async (req, res) => {
         billTotal: summary.billTotal,
         netTotal: summary.paymentTotal - summary.expenseTotal,
       }))
+      .filter(summary => projectMap.has(summary.projectId)) // Only include projects that exist
       .sort((a, b) => b.paymentTotal - a.paymentTotal);
     res.json({
       totalLeads,
@@ -151,7 +203,15 @@ exports.dashboard_summary = async (req, res) => {
 };
 exports.monthly_expenses = async (req, res) => {
   try {
-    const monthlyExpenses = await Expense.aggregate([
+    const { from, to } = req.query
+    const dateRange = buildDateRange(from, to)
+
+    const pipeline = []
+    if (dateRange) {
+      pipeline.push({ $match: { createdAt: dateRange } })
+    }
+
+    pipeline.push(
       {
         $group: {
           _id: {
@@ -175,8 +235,10 @@ exports.monthly_expenses = async (req, res) => {
           },
           total: 1,
         },
-      },
-    ]);
+      }
+    )
+
+    const monthlyExpenses = await Expense.aggregate(pipeline)
     res.json(monthlyExpenses);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch monthly expenses' });
@@ -185,12 +247,16 @@ exports.monthly_expenses = async (req, res) => {
 
 exports.vendor_analytics = async (req, res) => {
   try {
+    const { from, to } = req.query
+    const dateRange = buildDateRange(from, to)
+
     const vendors = await Vendor.find({}, 'name type totalPaid paymentHistory')
       .sort({ totalPaid: -1 })
       .limit(10);
 
-    const vendorPayments = await Vendor.aggregate([
+    const pipeline = [
       { $unwind: '$paymentHistory' },
+      ...(dateRange ? [{ $match: { 'paymentHistory.date': dateRange } }] : []),
       {
         $group: {
           _id: {
@@ -215,7 +281,9 @@ exports.vendor_analytics = async (req, res) => {
           total: 1
         }
       }
-    ]);
+    ];
+
+    const vendorPayments = await Vendor.aggregate(pipeline);
 
     res.json({
       topVendors: vendors.map(v => ({
@@ -233,6 +301,11 @@ exports.vendor_analytics = async (req, res) => {
 
 exports.client_summary = async (req, res) => {
   try {
+    const { from, to } = req.query
+    const billDateRange = buildDateRange(from, to)
+    const paymentDateRange = buildDateRange(from, to)
+    const expenseDateRange = buildDateRange(from, to)
+
     // Get all projects grouped by client
     const projects = await Project.find({}, 'projectName clientName _id')
       .lean();
@@ -254,7 +327,8 @@ exports.client_summary = async (req, res) => {
         const billAgg = await Bill.aggregate([
           {
             $match: {
-              project: { $in: projectIds }
+              project: { $in: projectIds },
+              ...(billDateRange ? { billDate: billDateRange } : {}),
             }
           },
           {
@@ -269,7 +343,8 @@ exports.client_summary = async (req, res) => {
         const paymentAgg = await Payment.aggregate([
           {
             $match: {
-              project: { $in: projectIds }
+              project: { $in: projectIds },
+              ...(paymentDateRange ? { date: paymentDateRange } : {}),
             }
           },
           {
@@ -288,7 +363,10 @@ exports.client_summary = async (req, res) => {
           clientProjects.map(async (project) => {
             const projBills = await Bill.aggregate([
               {
-                $match: { project: project._id }
+                $match: {
+                  project: project._id,
+                  ...(billDateRange ? { billDate: billDateRange } : {}),
+                }
               },
               {
                 $group: {
@@ -300,7 +378,10 @@ exports.client_summary = async (req, res) => {
 
             const projPayments = await Payment.aggregate([
               {
-                $match: { project: project._id }
+                $match: {
+                  project: project._id,
+                  ...(paymentDateRange ? { date: paymentDateRange } : {}),
+                }
               },
               {
                 $group: {
@@ -314,7 +395,8 @@ exports.client_summary = async (req, res) => {
               {
                 $match: {
                   project: project._id,
-                  type: { $ne: 'payment' }
+                  type: { $ne: 'payment' },
+                  ...(expenseDateRange ? { date: expenseDateRange } : {}),
                 }
               },
               {
@@ -354,5 +436,45 @@ exports.client_summary = async (req, res) => {
   } catch (err) {
     console.error('Client summary error:', err);
     res.status(500).json({ message: 'Failed to fetch client summary' });
+  }
+};
+
+exports.expense_types = async (req, res) => {
+  try {
+    const { from, to } = req.query
+    const dateRange = buildDateRange(from, to)
+
+    const pipeline = [
+      {
+        $match: {
+          type: { $ne: 'payment' }, // Exclude payment type expenses
+          ...(dateRange ? { date: dateRange } : {}),
+        }
+      },
+      {
+        $group: {
+          _id: '$category',
+          total: { $sum: '$amount' },
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { total: -1 }
+      },
+      {
+        $project: {
+          category: '$_id',
+          total: 1,
+          count: 1,
+          _id: 0
+        }
+      }
+    ];
+
+    const expenseTypes = await Expense.aggregate(pipeline);
+    res.json(expenseTypes);
+  } catch (err) {
+    console.error('Expense types error:', err);
+    res.status(500).json({ message: 'Failed to fetch expense types' });
   }
 };

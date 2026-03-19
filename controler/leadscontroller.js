@@ -1,5 +1,23 @@
 const Lead = require('../model/lead');
 
+function buildDateRange(from, to) {
+  const range = {}
+  if (from) {
+    const fromDate = new Date(from)
+    if (!isNaN(fromDate.getTime())) {
+      range.$gte = fromDate
+    }
+  }
+  if (to) {
+    const toDate = new Date(to)
+    if (!isNaN(toDate.getTime())) {
+      toDate.setHours(23, 59, 59, 999)
+      range.$lte = toDate
+    }
+  }
+  return Object.keys(range).length ? range : null
+}
+
 exports.create = async (req, res) => {
   try {
     const lead = await Lead.create(req.body);
@@ -11,7 +29,13 @@ exports.create = async (req, res) => {
 
 exports.list = async (req, res) => {
   try {
-    const leads = await Lead.find();
+    const filter = {}
+    const dateRange = buildDateRange(req.query.from, req.query.to)
+    if (dateRange) {
+      filter.createdAt = dateRange
+    }
+
+    const leads = await Lead.find(filter);
     res.json(leads);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch leads' });
