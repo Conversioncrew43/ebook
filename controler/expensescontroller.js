@@ -51,6 +51,51 @@ exports.create = async (req, res) => {
 exports.list = async (req, res) => {
   try {
     const filter = {};
+    const dateRange = buildDateRange(req.query.from, req.query.to)
+    if (dateRange) {
+      filter.date = dateRange
+    }
+
+    const expenses = await Expense.find(filter).populate('project', 'projectName').populate('vendor', 'vendorName');
+    res.json(expenses);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch expenses' });
+  }
+};
+
+exports.get = async (req, res) => {
+  try {
+    const expense = await Expense.findById(req.params.id).populate('project').populate('vendor');
+    if (!expense) return res.status(404).json({ message: 'Expense not found' });
+    res.json(expense);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch expense' });
+  }
+};
+
+exports.update = async (req, res) => {
+  try {
+    const expense = await Expense.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!expense) return res.status(404).json({ message: 'Expense not found' });
+    res.json(expense);
+  } catch (err) {
+    res.status(400).json({ message: 'Failed to update expense' });
+  }
+};
+
+exports.delete = async (req, res) => {
+  try {
+    const expense = await Expense.findByIdAndDelete(req.params.id);
+    if (!expense) return res.status(404).json({ message: 'Expense not found' });
+    res.json({ message: 'Expense deleted' });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to delete expense' });
+  }
+};
+
+exports.list = async (req, res) => {
+  try {
+    const filter = {};
     if (req.query.projectId) {
       filter.project = req.query.projectId;
     }

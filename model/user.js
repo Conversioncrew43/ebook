@@ -29,14 +29,26 @@ const userSchema = new Schema({
     },
     role: {
         type: String,
-        enum: ['admin', 'user'],
-        default: 'admin',
+        enum: ['admin', 'project_manager', 'accountant', 'site_supervisor', 'sales_crm', 'vendor', 'client'],
+        default: 'site_supervisor',
+    },
+    permissions: {
+        type: [String],
+        enum: ['read', 'create', 'update', 'delete'],
+        default: ['read']
+    },
+    dataAccess: {
+        type: String,
+        enum: ['all_projects', 'assigned_projects', 'own_data'],
+        default: 'assigned_projects'
     },
     assignedProjects: [{
         type: Schema.Types.ObjectId,
         ref: 'Project',
         default: []
     }],
+    resetToken: String,
+    resetTokenExpiry: Date,
     activityLog: [{
         action: String,
         timestamp: { type: Date, default: Date.now },

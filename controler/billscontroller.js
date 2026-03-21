@@ -1,5 +1,7 @@
 const Bill = require('../model/bill');
 const Project = require('../model/project');
+const User = require('../model/user');
+const { emailTemplates, sendEmail } = require('../utils/email');
 
 function buildDateRange(from, to) {
   const range = {}
@@ -40,6 +42,18 @@ exports.create = async (req, res) => {
     // Add bill to project
     if (bill.project) {
       await Project.findByIdAndUpdate(bill.project, { $addToSet: { bills: bill._id } });
+    }
+
+    // Send email to client if they have a user account
+    try {
+      const client = await User.findOne({ name: bill.clientName, role: 'client' });
+      if (client) {
+        const template = emailTemplates.billGenerated(client, bill);
+        await sendEmail(client.email, template.subject, template.html, template.text);
+        console.log(`Bill notification email sent to ${client.email}`);
+      }
+    } catch (emailError) {
+      console.error('Failed to send bill email:', emailError);
     }
 
     res.status(201).json(bill);

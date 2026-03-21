@@ -1,33 +1,59 @@
-// Password reset request: generates a reset token (for demo, returns a dummy token)
+// Password reset request
 module.exports.password_reset_request = async (req, res) => {
     const { email } = req.body;
-    // In production, generate a secure token and email it
-    // For demo, just return a dummy token if user exists
-    const user = await User.findOne({ email });
-    if (!user) {
-        return res.status(400).json({ message: 'Email not found' });
+    try {
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(400).json({ message: 'Email not found' });
+        }
+
+        // Generate reset token
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const resetTokenExpiry = Date.now() + 3600000; // 1 hour
+
+        user.resetToken = resetToken;
+        user.resetTokenExpiry = resetTokenExpiry;
+        await user.save();
+
+        // Send email
+        const template = emailTemplates.passwordReset(user, resetToken);
+        await sendEmail(user.email, template.subject, template.html, template.text);
+
+        res.json({ message: 'Password reset email sent' });
+    } catch (error) {
+        console.error('Password reset request error:', error);
+        res.status(500).json({ message: 'Failed to send reset email' });
     }
-    // Generate a dummy token (in real app, store in DB and expire it)
-    const resetToken = 'RESET-' + Math.random().toString(36).substring(2, 15);
-    // Optionally: save token to user, send email, etc.
-    res.json({ ok: true, resetToken });
 };
 
-// Password reset confirm: sets new password if token is valid (demo: always accepts)
+// Password reset confirm
 module.exports.password_reset_confirm = async (req, res) => {
     const { token, newPassword } = req.body;
-    // In production, validate token and find user
-    // For demo, just update the first user
-    const user = await User.findOne();
-    if (!user) {
-        return res.status(400).json({ message: 'User not found' });
+    try {
+        const user = await User.findOne({
+            resetToken: token,
+            resetTokenExpiry: { $gt: Date.now() }
+        });
+
+        if (!user) {
+            return res.status(400).json({ message: 'Invalid or expired token' });
+        }
+
+        user.password = newPassword;
+        user.resetToken = undefined;
+        user.resetTokenExpiry = undefined;
+        await user.save();
+
+        res.json({ message: 'Password reset successful' });
+    } catch (error) {
+        console.error('Password reset confirm error:', error);
+        res.status(500).json({ message: 'Failed to reset password' });
     }
-    user.password = newPassword;
-    await user.save();
-    res.json({ ok: true });
 };
 const User = require('../model/user');
-const jwt = require('jsonwebtoken')
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const { sendEmail, emailTemplates } = require('../utils/email');
 
 
 const handleErrors = (err)=>{
