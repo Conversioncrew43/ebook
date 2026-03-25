@@ -54,15 +54,21 @@ exports.getAll = async (req, res) => {
             .skip((page - 1) * limit);
 
         const total = await Vendor.countDocuments(query);
+        const vendorIds = vendors.map(v => v._id);
+
+        // Fetch all expenses for these vendors to calculate totals
+        const expensesAgg = await Expense.aggregate([
+            { $match: { vendor: { $in: vendorIds }, type: 'expense' } },
+            { $group: { _id: '$vendor', total: { $sum: '$amount' } } }
+        ]);
+        const totalsMap = {};
+        expensesAgg.forEach(row => {
+            totalsMap[row._id.toString()] = row.total;
+        });
 
         // Calculate totals for each vendor
         const vendorsWithTotals = vendors.map(vendor => {
-            // Filter payment history by project if projectId is specified
-            const filteredPaymentHistory = projectId 
-                ? vendor.paymentHistory.filter(p => p.project?.toString() === projectId)
-                : vendor.paymentHistory;
-            
-            const totalPaid = filteredPaymentHistory.reduce((sum, payment) => sum + payment.amount, 0);
+            const totalPaid = totalsMap[vendor._id.toString()] || 0;
 
             return {
                 _id: vendor._id,
@@ -75,15 +81,7 @@ exports.getAll = async (req, res) => {
                 },
                 address: vendor.address,
                 projects: vendor.assignedProjects,
-                paymentHistory: filteredPaymentHistory.map(p => ({
-                    _id: p._id,
-                    amount: p.amount,
-                    date: p.paymentDate,
-                    method: p.paymentMethod,
-                    projectId: p.project,
-                    status: p.status,
-                    notes: p.notes
-                })),
+                paymentHistory: [], // Not needed for getAll list
                 totalPaid,
                 createdAt: vendor.createdAt
             };
@@ -99,14 +97,15 @@ exports.getAll = async (req, res) => {
 exports.getById = async (req, res) => {
     try {
         const vendor = await Vendor.findById(req.params.id)
-            .populate('assignedProjects', 'projectName')
-            .populate('paymentHistory.project', 'projectName');
+            .populate('assignedProjects', 'projectName');
 
         if (!vendor) {
             return res.status(404).json({ message: 'Vendor not found' });
         }
 
-        const totalPaid = vendor.paymentHistory.reduce((sum, payment) => sum + payment.amount, 0);
+        // Fetch all expenses associated with this vendor
+        const vendorExpenses = await Expense.find({ vendor: vendor._id }).populate('project', 'projectName').sort({ date: -1 });
+        const totalPaid = vendorExpenses.reduce((sum, payment) => sum + payment.amount, 0);
 
         const vendorResponse = {
             _id: vendor._id,
@@ -119,15 +118,15 @@ exports.getById = async (req, res) => {
             },
             address: vendor.address,
             projects: vendor.assignedProjects,
-            paymentHistory: vendor.paymentHistory.map(p => ({
+            paymentHistory: vendorExpenses.map(p => ({
                 _id: p._id,
                 amount: p.amount,
-                date: p.paymentDate,
-                method: p.paymentMethod,
-                projectId: p.project,
-                projectName: p.project?.projectName || 'Unknown Project',
-                status: p.status,
-                notes: p.notes
+                date: p.date,
+                method: p.paymentMethod || 'Transfer',
+                projectId: p.project?._id,
+                projectName: p.project?.projectName || '-',
+                status: 'Paid',
+                notes: p.notes || p.title
             })),
             totalPaid,
             createdAt: vendor.createdAt
@@ -193,14 +192,14 @@ exports.update = async (req, res) => {
         };
 
         const vendor = await Vendor.findByIdAndUpdate(req.params.id, updateData, { new: true })
-            .populate('assignedProjects', 'projectName')
-            .populate('paymentHistory.project', 'projectName');
+            .populate('assignedProjects', 'projectName');
 
         if (!vendor) {
             return res.status(404).json({ message: 'Vendor not found' });
         }
 
-        const totalPaid = vendor.paymentHistory.reduce((sum, payment) => sum + payment.amount, 0);
+        const vendorExpenses = await Expense.find({ vendor: vendor._id }).populate('project', 'projectName').sort({ date: -1 });
+        const totalPaid = vendorExpenses.reduce((sum, payment) => sum + payment.amount, 0);
 
         const vendorResponse = {
             _id: vendor._id,
@@ -212,15 +211,15 @@ exports.update = async (req, res) => {
             },
             address: vendor.address,
             projects: vendor.assignedProjects,
-            paymentHistory: vendor.paymentHistory.map(p => ({
+            paymentHistory: vendorExpenses.map(p => ({
                 _id: p._id,
                 amount: p.amount,
-                date: p.paymentDate,
-                method: p.paymentMethod,
-                projectId: p.project,
-                projectName: p.project?.projectName || 'Unknown Project',
-                status: p.status,
-                notes: p.notes
+                date: p.date,
+                method: p.paymentMethod || 'Transfer',
+                projectId: p.project?._id,
+                projectName: p.project?.projectName || '-',
+                status: 'Paid',
+                notes: p.notes || p.title
             })),
             totalPaid,
             createdAt: vendor.createdAt
@@ -255,24 +254,15 @@ exports.recordPayment = async (req, res) => {
             return res.status(404).json({ message: 'Vendor not found' });
         }
 
-        // Add payment to vendor's history
-        vendor.paymentHistory.push({
-            project: projectId,
-            amount: parseFloat(amount),
-            paymentDate: new Date(date),
-            paymentMethod: method,
-            status: 'Paid'
-        });
-
-        await vendor.save();
-
         // Auto-create expense record
         const expense = new Expense({
             title: `Payment to ${vendor.vendorName}`,
             category: 'Vendor Payment',
             amount: parseFloat(amount),
             project: projectId,
+            vendor: vendorId, // Add vendor relation properly
             date: new Date(date),
+            paymentMethod: method,
             notes: `Payment made to vendor ${vendor.vendorName}`,
             type: 'expense'
         });
@@ -290,19 +280,11 @@ exports.deletePaymentHistory = async (req, res) => {
     try {
         const { vendorId, paymentId } = req.params;
 
-        const vendor = await Vendor.findById(vendorId);
-        if (!vendor) {
-            return res.status(404).json({ message: 'Vendor not found' });
-        }
-
-        // Find and remove the specific payment history entry
-        const paymentIndex = vendor.paymentHistory.findIndex(p => p._id.toString() === paymentId);
-        if (paymentIndex === -1) {
+        // Since payment history now routes directly to Expenses, we should delete the Expense record
+        const expense = await Expense.findOneAndDelete({ _id: paymentId, vendor: vendorId });
+        if (!expense) {
             return res.status(404).json({ message: 'Payment history entry not found' });
         }
-
-        vendor.paymentHistory.splice(paymentIndex, 1);
-        await vendor.save();
 
         res.json({ message: 'Payment history entry deleted successfully' });
     } catch (err) {
@@ -313,19 +295,35 @@ exports.deletePaymentHistory = async (req, res) => {
 // Get vendor analytics
 exports.getAnalytics = async (req, res) => {
     try {
-        const vendors = await Vendor.find({}, 'vendorName vendorType paymentHistory')
-            .sort({ 'paymentHistory.amount': -1 })
-            .limit(10);
+        const expensesAgg = await Expense.aggregate([
+            { $match: { vendor: { $exists: true }, type: 'expense' } },
+            { $group: { _id: '$vendor', totalPaid: { $sum: '$amount' }, paymentCount: { $sum: 1 } } },
+            { $sort: { totalPaid: -1 } },
+            { $limit: 10 }
+        ]);
 
-        const vendorPayments = await Vendor.aggregate([
-            { $unwind: '$paymentHistory' },
+        const topVendorIds = expensesAgg.map(agg => agg._id);
+        const vendors = await Vendor.find({ _id: { $in: topVendorIds } }, 'vendorName vendorType');
+        
+        const topVendors = expensesAgg.map(agg => {
+            const v = vendors.find(vend => vend._id.toString() === agg._id.toString());
+            return {
+                name: v ? v.vendorName : 'Unknown',
+                type: v ? v.vendorType : 'Other',
+                totalPaid: agg.totalPaid,
+                paymentCount: agg.paymentCount
+            };
+        });
+
+        const vendorPayments = await Expense.aggregate([
+            { $match: { vendor: { $exists: true }, type: 'expense' } },
             {
                 $group: {
                     _id: {
-                        year: { $year: '$paymentHistory.paymentDate' },
-                        month: { $month: '$paymentHistory.paymentDate' }
+                        year: { $year: '$date' },
+                        month: { $month: '$date' }
                     },
-                    total: { $sum: '$paymentHistory.amount' }
+                    total: { $sum: '$amount' }
                 }
             },
             {
@@ -344,13 +342,6 @@ exports.getAnalytics = async (req, res) => {
                 }
             }
         ]);
-
-        const topVendors = vendors.map(v => ({
-            name: v.vendorName,
-            type: v.vendorType,
-            totalPaid: v.paymentHistory.reduce((sum, p) => sum + p.amount, 0),
-            paymentCount: v.paymentHistory.length
-        })).sort((a, b) => b.totalPaid - a.totalPaid);
 
         res.json({
             topVendors,

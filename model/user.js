@@ -29,7 +29,7 @@ const userSchema = new Schema({
     },
     role: {
         type: String,
-        enum: ['admin', 'project_manager', 'accountant', 'site_supervisor', 'sales_crm', 'vendor', 'client'],
+        enum: ['admin', 'project_manager', 'accountant', 'site_supervisor', 'sales_crm', 'client'],
         default: 'site_supervisor',
     },
     permissions: {
