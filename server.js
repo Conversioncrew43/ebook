@@ -98,20 +98,6 @@ async function initializeDatabase() {
           await adminUser.save();
           console.log("Admin user created: admin@aditya.com / admin123");
         }
-        try {
-          const dummyExpense = await Expense.create({ title: 'dummy', amount: 0 });
-          await Expense.deleteOne({ _id: dummyExpense._id });
-          console.log("Expenses collection initialized");
-        } catch (err) {
-          console.log("Expenses collection ready:", err.message);
-        }
-        try {
-          const dummyPayment = await Payment.create({ title: 'dummy', amount: 0 });
-          await Payment.deleteOne({ _id: dummyPayment._id });
-          console.log("Payments collection initialized");
-        } catch (err) {
-          console.log("Payments collection ready:", err.message);
-        }
         return mongoose.connection;
       })
       .catch((err) => {
