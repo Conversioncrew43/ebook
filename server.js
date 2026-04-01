@@ -17,10 +17,10 @@ const billsRoutes = require("./routes/bills");
 var bodyParser = require("body-parser");
 const multer = require("multer");
 
+let connectionPromise = null;
+
 const dns = require("dns");
 dns.setServers(["1.1.1.1", "8.8.8.8"]);
-
-
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -69,9 +69,6 @@ app.get("/", (req, res) => {
   res.send({ hello: "world" });
 });
 
-
-
-
 const port = process.env.PORT || 5000;
 const dbURI =
   "mongodb+srv://Aditya:Aditya@cluster0.atrko.mongodb.net/Acons?retryWrites=true&w=majority";
@@ -80,41 +77,61 @@ const User = require("./model/user");
 const Expense = require("./model/expense");
 const Payment = require("./model/payment");
 
-mongoose.connect(dbURI)
-  .then(async () => {
-    console.log("connected");
-    // Check if user collection is empty and create admin if needed
-    const userCount = await User.countDocuments();
-    if (userCount === 0) {
-      const adminUser = new User({
-        name: "Admin",
-        email: "admin@aditya.com",
-        password: "admin123", // You may want to change this after first login
-        countryCode: "+91",
-        mobilenumber: 9999999999
+async function initializeDatabase() {
+  if (mongoose.connection.readyState === 1) {
+    return mongoose.connection;
+  }
+
+  if (!connectionPromise) {
+    connectionPromise = mongoose.connect(dbURI)
+      .then(async () => {
+        console.log("connected");
+        const userCount = await User.countDocuments();
+        if (userCount === 0) {
+          const adminUser = new User({
+            name: "Admin",
+            email: "admin@aditya.com",
+            password: "admin123",
+            countryCode: "+91",
+            mobilenumber: 9999999999
+          });
+          await adminUser.save();
+          console.log("Admin user created: admin@aditya.com / admin123");
+        }
+        try {
+          const dummyExpense = await Expense.create({ title: 'dummy', amount: 0 });
+          await Expense.deleteOne({ _id: dummyExpense._id });
+          console.log("Expenses collection initialized");
+        } catch (err) {
+          console.log("Expenses collection ready:", err.message);
+        }
+        try {
+          const dummyPayment = await Payment.create({ title: 'dummy', amount: 0 });
+          await Payment.deleteOne({ _id: dummyPayment._id });
+          console.log("Payments collection initialized");
+        } catch (err) {
+          console.log("Payments collection ready:", err.message);
+        }
+        return mongoose.connection;
+      })
+      .catch((err) => {
+        connectionPromise = null;
+        throw err;
       });
-      await adminUser.save();
-      console.log("Admin user created: admin@aditya.com / admin123");
-    }
-    // Ensure expenses collection exists
-    try {
-      await Expense.create({ title: 'dummy', amount: 0 });
-      await Expense.deleteOne({ title: 'dummy' });
-      console.log("Expenses collection initialized");
-    } catch (err) {
-      console.log("Expenses collection ready:", err.message);
-    }
-    // Ensure payments collection exists
-    try {
-      const dummyPayment = await Payment.create({ title: 'dummy', amount: 0 });
-      await Payment.deleteOne({ _id: dummyPayment._id });
-      console.log("Payments collection initialized");
-    } catch (err) {
-      console.log("Payments collection ready:", err.message);
-    }
-    app.listen(port);
-  })
-  .catch((err) => console.log(err));
+  }
+
+  return connectionPromise;
+}
+
+app.use(async (req, res, next) => {
+  try {
+    await initializeDatabase();
+    next();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Database connection failed' });
+  }
+});
 
 app.use("/api/auth", authRoutes);
 app.use("/api/reports", reportsRoutes);
@@ -126,3 +143,13 @@ app.use("/api/users", usersRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/vendors", vendorsRoutes);
 app.use("/api/bills", billsRoutes);
+
+if (process.env.VERCEL !== '1') {
+  initializeDatabase()
+    .then(() => {
+      app.listen(port);
+    })
+    .catch((err) => console.log(err));
+}
+
+module.exports = app;
