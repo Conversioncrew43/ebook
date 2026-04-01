@@ -47,7 +47,8 @@ exports.list = async (req, res) => {
 
     const payments = await Payment.find(filter)
       .populate('project', 'projectName')
-      .populate('user', 'name email');
+      .populate('user', 'name email')
+      .sort({ date: -1 });
     res.json(payments);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch payments' });
@@ -98,7 +99,8 @@ exports.list = async (req, res) => {
 
     const payments = await Payment.find(filter)
       .populate('project', 'projectName')
-      .populate('user', 'name email');
+      .populate('user', 'name email')
+      .sort({ date: -1 });
     res.json(payments);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch payments' });

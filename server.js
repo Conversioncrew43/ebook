@@ -106,8 +106,8 @@ mongoose.connect(dbURI)
     }
     // Ensure payments collection exists
     try {
-      await Payment.create({ title: 'dummy', amount: 0 });
-      await Payment.deleteOne({ title: 'dummy' });
+      const dummyPayment = await Payment.create({ title: 'dummy', amount: 0 });
+      await Payment.deleteOne({ _id: dummyPayment._id });
       console.log("Payments collection initialized");
     } catch (err) {
       console.log("Payments collection ready:", err.message);
