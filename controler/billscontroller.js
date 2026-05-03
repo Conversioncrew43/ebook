@@ -21,12 +21,24 @@ function buildDateRange(from, to) {
   return Object.keys(range).length ? range : null
 }
 
+async function generateNextBillNumber() {
+  const latestBill = await Bill.findOne({ billNumber: /^BILL-\d+$/ })
+    .sort({ billNumber: -1 })
+    .select('billNumber')
+    .lean()
+
+  const currentNumber = latestBill?.billNumber
+    ? Number.parseInt(latestBill.billNumber.replace('BILL-', ''), 10)
+    : 0
+
+  return `BILL-${String(currentNumber + 1).padStart(4, '0')}`
+}
+
 exports.create = async (req, res) => {
   try {
     // Generate bill number if not provided
     if (!req.body.billNumber) {
-      const count = await Bill.countDocuments();
-      req.body.billNumber = `BILL-${(count + 1).toString().padStart(4, '0')}`;
+      req.body.billNumber = await generateNextBillNumber();
     }
 
     // Calculate total amount if not provided

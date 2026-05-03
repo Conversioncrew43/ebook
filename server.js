@@ -93,10 +93,34 @@ async function initializeDatabase() {
             email: "admin@aditya.com",
             password: "admin123",
             countryCode: "+91",
-            mobilenumber: 9999999999
+            mobilenumber: 9999999999,
+            role: "admin",
           });
           await adminUser.save();
           console.log("Admin user created: admin@aditya.com / admin123");
+        } else {
+          // Check if admin user has correct role
+          const adminUser = await User.findOne({ email: "admin@aditya.com" });
+          if (adminUser && adminUser.role !== "admin") {
+            console.log("Fixing admin role...");
+            adminUser.role = "admin";
+            await adminUser.save();
+            console.log("Admin role fixed for:", adminUser.email);
+          } else if (adminUser) {
+            console.log("Admin user verified:", adminUser.email, "role:", adminUser.role);
+          } else {
+            console.log("Admin user not found, creating new one...");
+            const newAdminUser = new User({
+              name: "Admin",
+              email: "admin@aditya.com",
+              password: "admin123",
+              countryCode: "+91",
+              mobilenumber: 9999999999,
+              role: "admin",
+            });
+            await newAdminUser.save();
+            console.log("Admin user created: admin@aditya.com / admin123");
+          }
         }
         return mongoose.connection;
       })

@@ -7,70 +7,85 @@ const rolePermissions = {
   admin: {
     name: 'Admin',
     permissions: {
+      dashboard: ['read'],
       users: ['read', 'create', 'update', 'delete'],
       projects: ['read', 'create', 'update', 'delete'],
       expenses: ['read', 'create', 'update', 'delete'],
       payments: ['read', 'create', 'update', 'delete'],
+      bills: ['read', 'create', 'update', 'delete'],
       vendors: ['read', 'create', 'update', 'delete'],
       reports: ['read', 'create', 'update', 'delete'],
       settings: ['read', 'create', 'update', 'delete'],
       leads: ['read', 'create', 'update', 'delete'],
-      financial: ['read', 'create', 'update', 'delete']
+      clients: ['read', 'create', 'update', 'delete'],
     },
     dataAccess: 'all',
-    description: 'Full Control - Access to all modules and financial metrics'
+    description: 'Full Control - Access to all modules and actions'
   },
   project_manager: {
     name: 'Project Manager',
     permissions: {
-      projects: ['read', 'create', 'update'], // Can create and update assigned projects
-      expenses: ['read'], // Can view expenses
-      payments: ['read'], // Can view vendor payments
-      vendors: ['read', 'update'], // Can view and assign vendors
-      reports: ['read'], // Can view reports
-      financial: ['read'] // Can view budget and financial metrics
+      dashboard: ['read'],
+      projects: ['read', 'create', 'update'],
+      clients: ['read'],
+      vendors: ['read', 'update'],
+      expenses: ['read'],
+      payments: ['read'],
+      bills: ['read'],
+      reports: ['read'],
+      leads: ['read', 'create', 'update'],
     },
     dataAccess: 'assigned_projects',
-    description: 'Full access to assigned projects, can view budget/expenses/payments, update progress'
-  },
-  accountant: {
-    name: 'Accountant',
-    permissions: {
-      expenses: ['read', 'create', 'update', 'delete'],
-      payments: ['read', 'create', 'update', 'delete'],
-      reports: ['read', 'create', 'update', 'delete'],
-      financial: ['read', 'create', 'update', 'delete'],
-      projects: ['read'] // Can view project details for financial context
-    },
-    dataAccess: 'all',
-    description: 'Full access to financial data across all projects'
+    description: 'Manage projects, assign supervisors, view expenses, monitor progress'
   },
   site_supervisor: {
     name: 'Site Supervisor',
     permissions: {
-      projects: ['read', 'update'] // Can view and update progress/notes
+      dashboard: ['read'],
+      projects: ['read', 'update'],
+      expenses: ['read', 'create'],
     },
     dataAccess: 'assigned_projects',
-    description: 'Access to assigned projects only - can view/update progress and notes'
+    description: 'Manage sites, mark attendance, update daily progress, request materials'
   },
-  sales_crm: {
-    name: 'Sales / CRM',
+  accountant: {
+    name: 'Accountant',
     permissions: {
+      dashboard: ['read'],
+      users: ['read', 'create', 'update', 'delete'],
+      projects: ['read', 'create', 'update', 'delete'],
+      expenses: ['read', 'create', 'update', 'delete'],
+      payments: ['read', 'create', 'update', 'delete'],
+      bills: ['read', 'create', 'update', 'delete'],
+      vendors: ['read', 'create', 'update', 'delete'],
+      reports: ['read', 'create', 'update', 'delete'],
+      settings: ['read', 'create', 'update', 'delete'],
       leads: ['read', 'create', 'update', 'delete'],
-      projects: ['read'] // Basic project summary only
+      clients: ['read', 'create', 'update', 'delete'],
+    },
+    dataAccess: 'all',
+    description: 'Full Control - Access to all modules and actions'
+  },
+  staff: {
+    name: 'Staff',
+    permissions: {
+      dashboard: ['read'],
+      projects: ['read'],
     },
     dataAccess: 'own_data',
-    description: 'Lead-related data only, basic project summary access'
+    description: 'Mark attendance, view own tasks, upload work proof'
   },
   client: {
     name: 'Client',
     permissions: {
-      projects: ['read'], // Can view assigned projects
-      payments: ['read'], // Can view payments for their projects
-      bills: ['read'], // Can view bills for their projects
+      dashboard: ['read'],
+      projects: ['read'],
+      clients: ['read'],
+      payments: ['read'],
+      bills: ['read'],
     },
-    dataAccess: 'own_data',
-    description: 'Access to own project data and financial summaries'
+    dataAccess: 'assigned_projects',
+    description: 'View project status, download reports, view images/videos'
   }
 };
 
@@ -81,12 +96,15 @@ const authenticate = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, SECRET);
+    console.log(`Auth Debug: Decoded token ID: ${decoded.id}`);
     const user = await User.findById(decoded.id);
     if (!user) return res.status(401).json({ message: 'Invalid token or user not found.' });
 
+    console.log(`Auth Debug: Found user - Email: ${user.email}, Role: "${user.role}"`);
     req.user = user;
     next();
   } catch (err) {
+    console.log(`Auth Error: ${err.message}`);
     return res.status(401).json({ message: 'Unauthorized: ' + err.message });
   }
 };
@@ -100,20 +118,33 @@ const requireRole = (roles) => (req, res, next) => {
 const canAccess = ({ module, action, projectIdField, userIdField }) => async (req, res, next) => {
   if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
 
+  console.log(`RBAC Check: User role="${req.user.role}", module="${module}", action="${action}"`);
+
   const roleConfig = rolePermissions[req.user.role];
-  if (!roleConfig) return res.status(403).json({ message: 'Forbidden: invalid role' });
+  if (!roleConfig) {
+    console.log(`RBAC Error: No role config found for role="${req.user.role}"`);
+    return res.status(403).json({ message: 'Forbidden: invalid role' });
+  }
 
   // Admin has full access
-  if (req.user.role === 'admin') return next();
+  if (req.user.role === 'admin') {
+    console.log(`RBAC: Admin bypass - User "${req.user.email}" has full access`);
+    return next();
+  }
 
   // Check if the role has permissions for this module
   const modulePermissions = roleConfig.permissions[module];
+  console.log(`RBAC: Available modules for role="${req.user.role}":`, Object.keys(roleConfig.permissions));
+  console.log(`RBAC: Permissions for module="${module}":`, modulePermissions);
+  
   if (!modulePermissions) {
+    console.log(`RBAC Error: Module "${module}" not found in role permissions`);
     return res.status(403).json({ message: 'Forbidden: insufficient permission for module' });
   }
 
   // Check if the specific action is allowed
   if (!modulePermissions.includes(action)) {
+    console.log(`RBAC Error: Action "${action}" not allowed for module "${module}"`);
     return res.status(403).json({ message: 'Forbidden: insufficient permission for action' });
   }
 

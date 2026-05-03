@@ -94,13 +94,13 @@ module.exports.display_get = (req,res)=>{
 }
 module.exports.register_post = async(req,res)=>{
     console.log(req.body)
-    const {name,email,password,countryCode, mobileNumber} = req.body;
+    const {name,email,password,countryCode, mobileNumber, role} = req.body;
     console.log("mobile"+mobileNumber);
     try{
-      const user =await User.create({name,email,password,countryCode, mobileNumber});
+      const user =await User.create({name,email,password,countryCode, mobileNumber, role: role || 'staff'});
       const token = createToken(user._id);
       console.log(token);
-      res.status(201).json({token});
+      res.status(201).json({token, role: user.role});
     }
     catch(err){
         const errors = handleErrors(err);
@@ -126,7 +126,7 @@ module.exports.login_post = async (req,res)=>{
     const user = await User.login(email,password);
     const token = createToken(user._id);
     res.cookie('jwt',token,{httpOnly:true, maxAge:maxAge*1000});
-    res.status(200).json({token});
+    res.status(200).json({token, role: user.role});
    }
    catch(err){
     const errors = handleErrors(err);
