@@ -14,6 +14,10 @@ const usersRoutes = require("./routes/users");
 const settingsRoutes = require("./routes/settings");
 const vendorsRoutes = require("./routes/vendors");
 const billsRoutes = require("./routes/bills");
+const dprRoutes = require("./routes/dpr");
+const paymentsDPRRoutes = require("./routes/payments-dpr");
+const workerRatesRoutes = require("./routes/workerRates");
+const projectAssignmentsRoutes = require("./routes/projectAssignments");
 var bodyParser = require("body-parser");
 const multer = require("multer");
 
@@ -153,6 +157,10 @@ app.use("/api/users", usersRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/vendors", vendorsRoutes);
 app.use("/api/bills", billsRoutes);
+app.use("/api/dpr", dprRoutes);
+app.use("/api/weekly-payments", paymentsDPRRoutes);
+app.use("/api/worker-rates", workerRatesRoutes);
+app.use("/api/project-assignments", projectAssignmentsRoutes);
 
 if (process.env.VERCEL !== '1') {
   initializeDatabase()

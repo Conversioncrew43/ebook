@@ -18,6 +18,10 @@ const rolePermissions = {
       settings: ['read', 'create', 'update', 'delete'],
       leads: ['read', 'create', 'update', 'delete'],
       clients: ['read', 'create', 'update', 'delete'],
+      dpr: ['read', 'create', 'update', 'delete'],
+      weeklyPayments: ['read', 'create', 'update', 'delete'],
+      workerRates: ['read', 'create', 'update', 'delete'],
+      projectAssignments: ['read', 'create', 'update', 'delete'],
     },
     dataAccess: 'all',
     description: 'Full Control - Access to all modules and actions'
@@ -34,6 +38,10 @@ const rolePermissions = {
       bills: ['read'],
       reports: ['read'],
       leads: ['read', 'create', 'update'],
+      dpr: ['read', 'update'],
+      weeklyPayments: ['read'],
+      workerRates: ['read'],
+      projectAssignments: ['read', 'create', 'update'],
     },
     dataAccess: 'assigned_projects',
     description: 'Manage projects, assign supervisors, view expenses, monitor progress'
@@ -42,17 +50,18 @@ const rolePermissions = {
     name: 'Site Supervisor',
     permissions: {
       dashboard: ['read'],
-      projects: ['read', 'update'],
+      projects: ['read'],
       expenses: ['read', 'create'],
+      dpr: ['read', 'create', 'update'],
+      weeklyPayments: ['read'],
     },
     dataAccess: 'assigned_projects',
-    description: 'Manage sites, mark attendance, update daily progress, request materials'
+    description: 'Manage sites, submit DPR, view project progress'
   },
   accountant: {
     name: 'Accountant',
     permissions: {
       dashboard: ['read'],
-      users: ['read', 'create', 'update', 'delete'],
       projects: ['read', 'create', 'update', 'delete'],
       expenses: ['read', 'create', 'update', 'delete'],
       payments: ['read', 'create', 'update', 'delete'],
@@ -62,9 +71,12 @@ const rolePermissions = {
       settings: ['read', 'create', 'update', 'delete'],
       leads: ['read', 'create', 'update', 'delete'],
       clients: ['read', 'create', 'update', 'delete'],
+      dpr: ['read'],
+      weeklyPayments: ['read', 'update'],
+      workerRates: ['read', 'create', 'update', 'delete'],
     },
     dataAccess: 'all',
-    description: 'Full Control - Access to all modules and actions'
+    description: 'Manage payroll, track expenses, generate financial reports'
   },
   staff: {
     name: 'Staff',
