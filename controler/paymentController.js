@@ -146,7 +146,12 @@ exports.getWeeklyPayments = async (req, res) => {
     const { projectId } = req.params;
     const { status, startDate, endDate } = req.query;
     
-    const query = { projectId };
+    const query = {};
+    
+    // Only filter by projectId if it's provided in params
+    if (projectId) {
+      query.projectId = projectId;
+    }
     
     if (status) query.status = status;
     

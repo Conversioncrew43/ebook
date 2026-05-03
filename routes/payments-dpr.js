@@ -3,6 +3,9 @@ const router = express.Router();
 const paymentController = require('../controler/paymentController');
 const { authenticate, canAccess } = require('../controler/rbac');
 
+// Get all weekly payments (with optional status filter)
+router.get('/', authenticate, canAccess({ module: 'weeklyPayments', action: 'read' }), paymentController.getWeeklyPayments);
+
 // Generate weekly payment (admin, project manager)
 router.post('/generate-weekly', authenticate, canAccess({ module: 'weeklyPayments', action: 'create' }), paymentController.generateWeeklyPayment);
 
