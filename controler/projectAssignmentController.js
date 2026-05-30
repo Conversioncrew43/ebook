@@ -1,6 +1,7 @@
 const ProjectAssignment = require('../model/projectAssignment');
 const Project = require('../model/project');
 const User = require('../model/user');
+const { getExportFormat, exportToCSV, exportToJSON } = require('../utils/exportData');
 
 // Create or update project assignment
 exports.assignProjectToUsers = async (req, res) => {
@@ -134,6 +135,15 @@ exports.getProjectsByRole = async (req, res) => {
     const assignments = await ProjectAssignment.find(query)
       .populate('projectId')
       .populate('assignedUsers.userId', 'name email');
+    
+    // Handle export if requested
+    const exportFormat = getExportFormat(req.query);
+    if (exportFormat === 'csv') {
+      return exportToCSV(res, assignments, 'projectAssignments');
+    }
+    if (exportFormat === 'json') {
+      return exportToJSON(res, assignments, 'projectAssignments');
+    }
     
     res.json(assignments);
   } catch (error) {

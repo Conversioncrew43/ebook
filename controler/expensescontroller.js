@@ -1,5 +1,6 @@
 const Expense = require('../model/expense');
 const Project = require('../model/project');
+const { getExportFormat, exportToCSV, exportToJSON } = require('../utils/exportData');
 
 function buildDateRange(from, to) {
   const range = {}
@@ -57,6 +58,16 @@ exports.list = async (req, res) => {
     }
 
     const expenses = await Expense.find(filter).populate('project', 'projectName').populate('vendor', 'vendorName');
+    
+    // Handle export if requested
+    const exportFormat = getExportFormat(req.query);
+    if (exportFormat === 'csv') {
+      return exportToCSV(res, expenses, 'expenses');
+    }
+    if (exportFormat === 'json') {
+      return exportToJSON(res, expenses, 'expenses');
+    }
+    
     res.json(expenses);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch expenses' });

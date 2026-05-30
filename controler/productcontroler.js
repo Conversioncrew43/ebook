@@ -2,6 +2,7 @@ const { model } = require('mongoose');
 const Product = require('../model/products');
 const Purchase = require('../model/purchase');
 const { ObjectId } = require('mongodb');
+const { getExportFormat, exportToCSV, exportToJSON } = require('../utils/exportData');
 
 module.exports.product_post = (req, res) => {
     const product = new Product(req.body);
@@ -20,6 +21,15 @@ module.exports.product_get = (req, res) => {
     console.log(req.url);
     Product.find()
         .then(products => {
+            // Handle export if requested
+            const exportFormat = getExportFormat(req.query);
+            if (exportFormat === 'csv') {
+                return exportToCSV(res, products, 'products');
+            }
+            if (exportFormat === 'json') {
+                return exportToJSON(res, products, 'products');
+            }
+            
             res.status(200).json(products);
         })
         .catch(error => {

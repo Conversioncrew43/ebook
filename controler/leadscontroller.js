@@ -1,4 +1,5 @@
 const Lead = require('../model/lead');
+const { getExportFormat, exportToCSV, exportToJSON } = require('../utils/exportData');
 
 function buildDateRange(from, to) {
   const range = {}
@@ -81,6 +82,16 @@ exports.list = async (req, res) => {
     }
 
     const leads = await Lead.find(filter);
+    
+    // Handle export if requested
+    const exportFormat = getExportFormat(req.query);
+    if (exportFormat === 'csv') {
+      return exportToCSV(res, leads, 'leads');
+    }
+    if (exportFormat === 'json') {
+      return exportToJSON(res, leads, 'leads');
+    }
+    
     res.json(leads);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch leads' });

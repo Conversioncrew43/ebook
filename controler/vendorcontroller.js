@@ -1,6 +1,7 @@
 // Vendor controller
 const Vendor = require('../model/vendor');
 const Expense = require('../model/expense');
+const { getExportFormat, exportToCSV, exportToJSON } = require('../utils/exportData');
 
 // Get all vendors with optional filters
 exports.getAll = async (req, res) => {
@@ -86,6 +87,15 @@ exports.getAll = async (req, res) => {
                 createdAt: vendor.createdAt
             };
         });
+
+        // Handle export if requested
+        const exportFormat = getExportFormat(req.query);
+        if (exportFormat === 'csv') {
+            return exportToCSV(res, vendorsWithTotals, 'vendors');
+        }
+        if (exportFormat === 'json') {
+            return exportToJSON(res, vendorsWithTotals, 'vendors');
+        }
 
         res.json(vendorsWithTotals);
     } catch (err) {

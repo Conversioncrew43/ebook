@@ -1,4 +1,5 @@
 const WorkerRate = require('../model/workerRate');
+const { getExportFormat, exportToCSV, exportToJSON } = require('../utils/exportData');
 
 // Create worker rate
 exports.createWorkerRate = async (req, res) => {
@@ -46,6 +47,16 @@ exports.getWorkerRates = async (req, res) => {
     }
     
     const rates = await WorkerRate.find(query).sort({ type: 1 });
+    
+    // Handle export if requested
+    const exportFormat = getExportFormat(req.query);
+    if (exportFormat === 'csv') {
+      return exportToCSV(res, rates, 'workerRates');
+    }
+    if (exportFormat === 'json') {
+      return exportToJSON(res, rates, 'workerRates');
+    }
+    
     res.json(rates);
   } catch (error) {
     console.error('Get Worker Rates Error:', error);

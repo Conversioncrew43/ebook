@@ -1,11 +1,21 @@
 const { model } = require("mongoose");
 const Blog = require("../model/blogs");
+const { getExportFormat, exportToCSV, exportToJSON } = require('../utils/exportData');
 
 
 module.exports.get_blogs = (req, res) => {
   console.log(req.url);
   Blog.find()
     .then((result) => {
+      // Handle export if requested
+      const exportFormat = getExportFormat(req.query);
+      if (exportFormat === 'csv') {
+        return exportToCSV(res, result, 'blogs');
+      }
+      if (exportFormat === 'json') {
+        return exportToJSON(res, result, 'blogs');
+      }
+      
       res.status(200).json(result);
     })
     .catch((err) => {

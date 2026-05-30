@@ -2,6 +2,7 @@ const Bill = require('../model/bill');
 const Project = require('../model/project');
 const User = require('../model/user');
 const { emailTemplates, sendEmail } = require('../utils/email');
+const { getExportFormat, exportToCSV, exportToJSON } = require('../utils/exportData');
 
 function buildDateRange(from, to) {
   const range = {}
@@ -94,6 +95,15 @@ exports.list = async (req, res) => {
       .populate('project', 'projectName clientName')
       .populate('createdBy', 'name email')
       .sort({ createdAt: -1 });
+
+    // Handle export if requested
+    const exportFormat = getExportFormat(req.query);
+    if (exportFormat === 'csv') {
+      return exportToCSV(res, bills, 'bills');
+    }
+    if (exportFormat === 'json') {
+      return exportToJSON(res, bills, 'bills');
+    }
 
     res.json(bills);
   } catch (err) {

@@ -1,5 +1,6 @@
 const User = require('../model/user');
 const { emailTemplates, sendEmail } = require('../utils/email');
+const { getExportFormat, exportToCSV, exportToJSON } = require('../utils/exportData');
 
 exports.create = async (req, res) => {
   try {
@@ -27,6 +28,16 @@ exports.create = async (req, res) => {
 exports.list = async (req, res) => {
   try {
     const users = await User.find();
+    
+    // Handle export if requested
+    const exportFormat = getExportFormat(req.query);
+    if (exportFormat === 'csv') {
+      return exportToCSV(res, users, 'users');
+    }
+    if (exportFormat === 'json') {
+      return exportToJSON(res, users, 'users');
+    }
+    
     res.json(users);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch users' });

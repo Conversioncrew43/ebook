@@ -2,6 +2,7 @@ const DPR = require('../model/dpr');
 const WorkerRate = require('../model/workerRate');
 const WeeklyPayment = require('../model/weeklyPayment');
 const ProjectAssignment = require('../model/projectAssignment');
+const { getExportFormat, exportToCSV, exportToJSON } = require('../utils/exportData');
 
 // Helper function to process attendance and calculate worker-days
 const processAttendance = (attendance) => {
@@ -111,6 +112,15 @@ exports.getDPRByProject = async (req, res) => {
     const dprList = await DPR.find(query)
       .populate('supervisorId', 'name email')
       .sort({ date: -1 });
+    
+    // Handle export if requested
+    const exportFormat = getExportFormat(req.query);
+    if (exportFormat === 'csv') {
+      return exportToCSV(res, dprList, 'dpr');
+    }
+    if (exportFormat === 'json') {
+      return exportToJSON(res, dprList, 'dpr');
+    }
     
     res.json(dprList);
   } catch (error) {

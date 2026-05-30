@@ -1,6 +1,7 @@
 const Project = require('../model/project');
 const User = require('../model/user');
 const { emailTemplates, sendEmail } = require('../utils/email');
+const { getExportFormat, exportToCSV, exportToJSON } = require('../utils/exportData');
 
 function buildDateRange(from, to) {
   const range = {}
@@ -38,6 +39,16 @@ exports.list = async (req, res) => {
     }
 
     const projects = await Project.find(filter);
+    
+    // Handle export if requested
+    const exportFormat = getExportFormat(req.query);
+    if (exportFormat === 'csv') {
+      return exportToCSV(res, projects, 'projects');
+    }
+    if (exportFormat === 'json') {
+      return exportToJSON(res, projects, 'projects');
+    }
+    
     res.json(projects);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch projects' });
